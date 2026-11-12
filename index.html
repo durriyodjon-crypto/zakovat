@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zakovat O'yini</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Manrope:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.mybar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel2);border-radius:14px;padding:10px 14px;margin-bottom:14px}
+.mybar b{font-size:18px}
+.sendrow{display:flex;gap:10px;flex-wrap:wrap}
+.sendrow input{flex:1 1 220px;font-size:20px}
+.sendrow button{flex:0 0 auto;font-size:18px;padding:12px 22px}
+.sent{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:12px;padding:10px 14px}
+.cell{cursor:default}
+.wait{font-size:60px;margin-bottom:6px}
+@keyframes bob{50%{transform:translateY(-8px)}}
+.wait{animation:bob 2.4s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.wait{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brandline">
+      <div class="logo">💡 ZAKOVAT <span>O'YINI</span></div>
+      <div class="kelajak"><img src="kelajak-logo.jpg" alt="Kelajak markazlari logotipi" onerror="this.remove()"><span>Ishlab chiqaruvchi<b>«Kelajak» markazi</b></span></div>
+    </div>
+  </div>
+
+  <!-- Xabar ekrani (kutish, xato) -->
+  <section id="vMsg" class="card center">
+    <div class="wait" id="msgIcon">⏳</div>
+    <h1 id="msgTitle">Yuklanmoqda…</h1>
+    <p class="muted" id="msgText"></p>
+  </section>
+
+  <!-- Jamoani tanlash -->
+  <section id="vJoin" class="card center hidden">
+    <h1 id="joinTitle"></h1>
+    <p class="muted">Jamoangizni tanlang va boshlovchi bergan PIN-kodni kiriting.</p>
+    <form id="joinForm" class="stack" style="text-align:left">
+      <label class="field">Jamoa<select id="jTeam" required></select></label>
+      <label class="field">PIN-kod<input type="text" id="jPin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="off" placeholder="4 ta raqam"></label>
+      <button class="gold" type="submit" id="joinBtn">Kirish</button>
+      <div class="err" id="joinErr"></div>
+    </form>
+  </section>
+
+  <!-- O'yin -->
+  <section id="vGame" class="hidden">
+    <div class="mybar">
+      <div>Siz: <b id="meName"></b> <span class="muted" id="meSchool"></span></div>
+      <div class="rowx"><span class="pill" id="meScore"></span><button id="leaveBtn" style="padding:6px 12px;font-size:14px">Jamoani almashtirish</button></div>
+    </div>
+    <div class="teams" id="teamsBar"></div>
+
+    <div class="qcard hidden" id="qCard">
+      <div class="qmeta"><div class="rowx"><span class="pill" id="qCat"></span><span class="pill gold" id="qBall"></span></div><span class="muted" id="qWho"></span></div>
+      <div class="qtext" id="qText"></div>
+      <div class="timer"><div class="clock" id="clock">0</div><div class="bar"><i id="barFill"></i></div></div>
+      <form id="sendForm" class="sendrow hidden">
+        <input type="text" id="answerInput" maxlength="300" placeholder="Javobingizni yozing…" autocomplete="off">
+        <button class="gold" type="submit" id="sendBtn">Yuborish</button>
+      </form>
+      <div class="sent hidden" id="sentBox"></div>
+      <div class="answer hidden" id="resultBox">
+        <div class="verdict" id="verdict"></div>
+        <div class="lbl" style="margin-top:8px">To'g'ri javob</div>
+        <div class="val" id="aText"></div>
+      </div>
+    </div>
+
+    <p class="muted" id="boardHint" style="text-align:center;font-weight:700"></p>
+    <div class="board" id="board"></div>
+  </section>
+
+  <!-- Yakun -->
+  <section id="vEnd" class="card hidden" style="text-align:center">
+    <div style="font-size:64px">🏆</div>
+    <h1 style="font-family:var(--display);color:var(--gold);margin:0 0 6px" id="winText"></h1>
+    <p class="muted" id="endTitle"></p>
+    <ol class="rank" id="rankList"></ol>
+  </section>
+
+  <footer class="credit">
+    <img src="kelajak-logo.jpg" alt="Kelajak markazlari logotipi" onerror="this.remove()">
+    <p>Ushbu dastur <b>Sayxunobod tumani «Kelajak» markazi</b> tomonidan ishlab chiqilgan.</p>
+  </footer>
+</div>
+
+<script type="module">
+import { firebaseConfig } from "./firebase-config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const views = ["vMsg","vJoin","vGame","vEnd"];
+const show = v => views.forEach(x => $(x).classList.toggle("hidden", x !== v));
+function message(icon, title, text){ $("msgIcon").textContent = icon; $("msgTitle").textContent = title; $("msgText").textContent = text || ""; show("vMsg"); }
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) { message("⚙️", "Dastur hali sozlanmagan", "Boshlovchi Firebase sozlamalarini kiritishi kerak."); throw new Error("Firebase sozlanmagan"); }
+const gid = new URLSearchParams(location.search).get("g");
+if (!gid) { message("🔗", "Havola to'liq emas", "Boshlovchidan to'g'ri havolani so'rang."); throw new Error("g yo'q"); }
+
+const db = getFirestore(initializeApp(firebaseConfig));
+const gref = doc(db, "games", gid);
+const KEY = "zakovat-team-" + gid;
+let me = null; try { me = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
+let G = null, sent = {};   // sent[idx] = yuborilgan javob matni
+
+onSnapshot(gref, s => {
+  if (!s.exists()) { message("❓", "O'yin topilmadi", "Havola eskirgan yoki noto'g'ri. Boshlovchidan yangi havolani so'rang."); return; }
+  G = s.data({ serverTimestamps: "estimate" });
+  if (me && !G.teams.some(t => t.id === me.teamId)) forget();
+  render();
+}, () => message("📡", "Ulanib bo'lmadi", "Internet aloqasini tekshirib, sahifani yangilang."));
+
+function forget(){ me = null; try { localStorage.removeItem(KEY); } catch(e) {} }
+
+/* ---------- Jamoaga qo'shilish ---------- */
+$("joinForm").onsubmit = async e => {
+  e.preventDefault(); $("joinErr").textContent = ""; $("joinBtn").disabled = true;
+  const teamId = $("jTeam").value, pin = $("jPin").value.trim();
+  try {
+    // PIN-kod server tomonida tekshiriladi (firestore.rules)
+    await setDoc(doc(db, "games", gid, "joins", teamId), { pin, at: serverTimestamp() });
+    me = { teamId, pin }; try { localStorage.setItem(KEY, JSON.stringify(me)); } catch(e) {}
+    render();
+  } catch (err) {
+    $("joinErr").textContent = err.code === "permission-denied" ? "PIN-kod noto'g'ri. Boshlovchidan qayta so'rang." : "Ulanib bo'lmadi. Internetni tekshiring.";
+  } finally { $("joinBtn").disabled = false; }
+};
+$("leaveBtn").onclick = () => { forget(); render(); };
+
+/* ---------- Javob yuborish ---------- */
+$("sendForm").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("answerInput").value.trim(), c = G.current;
+  if (!text || !c || !me) return;
+  $("sendBtn").disabled = true;
+  try {
+    await setDoc(doc(db, "games", gid, "answers", c.idx + "_" + me.teamId), { idx: c.idx, teamId: me.teamId, text, pin: me.pin, at: serverTimestamp() });
+    sent[c.idx] = text; $("answerInput").value = ""; render();
+  } catch (err) {
+    $("sentBox").classList.remove("hidden");
+    $("sentBox").innerHTML = `<span class="err">${err.code === "permission-denied" ? "Javob qabul qilinmadi: vaqt tugagan yoki savol yopilgan." : "Yuborib bo'lmadi. Internetni tekshiring."}</span>`;
+  } finally { $("sendBtn").disabled = false; }
+};
+
+/* ---------- Taymer ---------- */
+function timeLeft(){
+  const c = G && G.current; if (!c) return 0;
+  if (c.startedAt === null) return c.pausedLeft || 0;
+  return Math.max(0, Math.ceil(c.dur - (Date.now() - c.startedAt.toMillis()) / 1000));
+}
+let wasOpen = false;
+setInterval(() => {
+  if (!G || !G.current || G.current.closed) return;
+  const l = timeLeft();
+  $("clock").textContent = l;
+  $("clock").classList.toggle("low", l <= 10);
+  $("barFill").style.width = (l / G.current.dur * 100) + "%";
+  const open = canAnswer();
+  if (open !== wasOpen) render();
+}, 250);
+function canAnswer(){
+  const c = G && G.current;
+  if (!c || c.closed || !me || G.status !== "live") return false;
+  if (G.mode === "turn" && (!G.teams[G.active] || G.teams[G.active].id !== me.teamId)) return false;
+  return c.startedAt === null || timeLeft() > 0;
+}
+
+/* ---------- Chizish ---------- */
+function render(){
+  if (!G) return;
+  document.title = G.title + " · Zakovat";
+  if (G.status === "draft") return message("⏳", G.title, "O'yin hali boshlanmagan. Boshlovchi start berishi bilan bu sahifa o'zi ochiladi, uni yopmang.");
+  if (G.status === "finished") return renderEnd();
+  if (!me) return renderJoin();
+
+  const myTeam = G.teams.find(t => t.id === me.teamId);
+  show("vGame");
+  $("meName").textContent = myTeam.name; $("meSchool").textContent = "· " + myTeam.school;
+  $("meScore").textContent = myTeam.score + " ball";
+  $("teamsBar").innerHTML = [...G.teams].map((t, i) => ({ t, i })).sort((a, b) => b.t.score - a.t.score).map(({ t, i }) => `
+    <div class="team ${i === G.active ? "active" : ""} ${t.id === me.teamId ? "me" : ""}">
+      <div style="min-width:0"><div class="tag">${i === G.active ? "Savol tanlaydi" : "&nbsp;"}</div><div class="nm">${esc(t.name)}</div><div class="sch">${esc(t.school)}</div></div>
+      <div class="sc">${t.score}</div></div>`).join("");
+
+  const c = G.current;
+  $("qCard").classList.toggle("hidden", !c);
+  if (c) {
+    $("qCat").textContent = c.cat; $("qBall").textContent = c.ball + " ball"; $("qText").textContent = c.q;
+    $("qWho").textContent = G.mode === "turn" ? "Javob beradi: " + (G.teams[G.active] ? G.teams[G.active].name : "") : "Barcha jamoalar javob yozadi";
+    const open = canAnswer(); wasOpen = open;
+    $("sendForm").classList.toggle("hidden", !open);
+    const mine = sent[c.idx];
+    $("sentBox").classList.toggle("hidden", !mine || c.closed);
+    if (mine) $("sentBox").innerHTML = `✓ Javobingiz yuborildi: <b>${esc(mine)}</b>${open ? '<br><span class="muted">Vaqt tugaguncha javobni o\'zgartirishingiz mumkin.</span>' : ""}`;
+    if (!open && !c.closed && !mine) {
+      $("sentBox").classList.remove("hidden");
+      $("sentBox").innerHTML = G.mode === "turn" && G.teams[G.active] && G.teams[G.active].id !== me.teamId
+        ? `<span class="muted">Bu savolga navbatdagi jamoa javob beradi.</span>` : `<span class="muted">Vaqt tugadi. Natijani kuting.</span>`;
+    }
+    $("resultBox").classList.toggle("hidden", !c.closed);
+    if (c.closed) {
+      const v = c.verdicts ? c.verdicts[me.teamId] : undefined;
+      $("verdict").className = "verdict " + (v === true ? "okv" : v === false ? "nov" : "");
+      $("verdict").textContent = v === true ? `✅ To'g'ri! +${c.ball} ball` : v === false ? "❌ Noto'g'ri" : "Natija e'lon qilindi";
+      $("aText").textContent = c.answer || "";
+      $("clock").textContent = "—"; $("barFill").style.width = "0%"; $("clock").classList.remove("low");
+    }
+  }
+  const cats = [...new Set(G.board.map(x => x.cat))];
+  $("board").innerHTML = cats.map(cat => `<div class="brow"><div class="cat">${esc(cat)}</div><div class="cells">${
+    G.board.map((x, i) => ({ x, i })).filter(o => o.x.cat === cat).map(({ x, i }) =>
+      `<div class="cell ${x.used ? "used" : ""} ${x.result === "ok" ? "okc" : ""} ${c && c.idx === i ? "now" : ""}" data-b="${x.ball}">${x.used ? (x.result === "ok" ? "✓" : "✗") : x.ball}</div>`).join("")
+  }</div></div>`).join("");
+  $("boardHint").textContent = c ? "" : (G.teams[G.active] ? `Navbatdagi savolni «${G.teams[G.active].name}» jamoasi tanlaydi` : "");
+}
+function renderJoin(){
+  show("vJoin");
+  $("joinTitle").textContent = G.title;
+  const prev = $("jTeam").value;
+  $("jTeam").innerHTML = `<option value="" disabled ${prev ? "" : "selected"}>— Jamoani tanlang —</option>` +
+    G.teams.map(t => `<option value="${t.id}" ${t.id === prev ? "selected" : ""}>${esc(t.school)} — ${esc(t.name)}</option>`).join("");
+}
+function renderEnd(){
+  show("vEnd");
+  const r = G.results || [...G.teams].sort((a, b) => b.score - a.score);
+  const max = r.length ? r[0].score : 0, win = r.filter(t => t.score === max);
+  $("winText").textContent = win.length ? (win.length > 1 ? "G'oliblar: " : "G'olib: ") + win.map(t => t.name).join(", ") : "O'yin yakunlandi";
+  $("endTitle").textContent = G.title;
+  $("rankList").innerHTML = r.map((t, i) => `<li><span>${i + 1}. ${esc(t.name)}<small>${esc(t.school)}</small></span><span>${t.score} ball</span></li>`).join("");
+}
+</script>
+</body>
+</html>

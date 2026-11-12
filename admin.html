@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zakovat Admin Paneli</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Manrope:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.qadmin .ans{background:var(--panel2);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.qadmin .ans.none{opacity:.55}
+.qadmin .ans .who{font-weight:800}
+.qadmin .ans .txt{font-size:19px;overflow-wrap:anywhere}
+.vbtn{padding:8px 14px;border:2px solid transparent}
+.vbtn.on.green{border-color:#fff}
+.vbtn.on.red{border-color:#fff}
+.vbtn:not(.on){background:var(--panel)}
+.secret{font-family:var(--display);color:var(--gold);letter-spacing:.15em}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--line);margin-right:6px}
+.dot.on{background:var(--green)}
+.linkbox{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel2);border-radius:12px;padding:10px 12px}
+.linkbox code{flex:1 1 260px;overflow-wrap:anywhere;font-size:14px}
+.games .item{cursor:pointer}
+.games .item:hover{border-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brandline">
+      <div class="logo">💡 ZAKOVAT <span>ADMIN</span></div>
+      <div class="kelajak"><img src="kelajak-logo.jpg" alt="Kelajak markazlari logotipi" onerror="this.remove()"><span>Ishlab chiqaruvchi<b>«Kelajak» markazi</b></span></div>
+    </div>
+    <div class="rowx hidden" id="userBar"><span class="muted" id="userEmail"></span><button id="logoutBtn">Chiqish</button></div>
+  </div>
+
+  <!-- Sozlanmagan -->
+  <section id="vNoConfig" class="card center hidden">
+    <h1>Firebase sozlanmagan</h1>
+    <p class="muted">firebase-config.js fayliga Firebase loyihangiz sozlamalarini qo'ying. Batafsil yo'riqnoma ONLAYN-SOZLASH.md faylida.</p>
+  </section>
+
+  <!-- Kirish -->
+  <section id="vLogin" class="card center hidden">
+    <h1>Admin kirishi</h1>
+    <form id="loginForm" class="stack" style="text-align:left">
+      <label class="field">Email<input type="email" id="lEmail" required autocomplete="username"></label>
+      <label class="field">Parol<input type="password" id="lPass" required autocomplete="current-password"></label>
+      <button class="gold" type="submit">Kirish</button>
+      <div class="err" id="loginErr"></div>
+    </form>
+  </section>
+
+  <!-- O'yinlar ro'yxati -->
+  <section id="vGames" class="grid2 hidden">
+    <div class="card">
+      <h2>Yangi o'yin yaratish</h2>
+      <form id="newGameForm" class="stack">
+        <label class="field">O'yin nomi<input type="text" id="gTitle" required placeholder="Masalan: Maktablararo Zakovat, 1-tur"></label>
+        <label class="field">Bitta savol uchun vaqt (soniya)<input type="number" id="gTime" min="10" max="600" step="5" value="120"></label>
+        <label class="field">Kim javob beradi
+          <select id="gMode">
+            <option value="all">Barcha jamoalar har bir savolga javob yozadi</option>
+            <option value="turn">Faqat savolni tanlagan (navbatdagi) jamoa</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="gMinus"> Noto'g'ri javobda ball ayirilsin</label>
+        <button class="gold" type="submit">Yaratish</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>O'yinlar va natijalar tarixi</h2>
+      <div class="list games" id="gamesList"><p class="muted">Yuklanmoqda…</p></div>
+    </div>
+  </section>
+
+  <!-- Bitta o'yin -->
+  <section id="vGame" class="hidden">
+    <div class="rowx" style="justify-content:space-between;margin-bottom:14px">
+      <div class="rowx"><button id="backBtn">← O'yinlar</button><h2 style="font-family:var(--display);margin:0;font-size:20px" id="gName"></h2><span class="pill" id="gStatus"></span></div>
+      <div class="rowx">
+        <button class="green" id="startBtn">▶ O'yinni boshlash</button>
+        <button class="red hidden" id="finishBtn">■ O'yinni yakunlash</button>
+        <button id="deleteGameBtn" title="O'yinni va uning barcha ma'lumotlarini o'chirish">🗑 O'chirish</button>
+      </div>
+    </div>
+    <div class="linkbox" style="margin-bottom:14px">
+      <span class="muted">O'quvchilar uchun havola:</span>
+      <code id="playerLink"></code>
+      <button id="copyLink">Nusxalash</button>
+    </div>
+    <div class="card hidden" id="confirmBox" style="margin-bottom:14px">
+      <div class="rowx"><span id="confirmText" style="font-weight:700"></span><button class="red" id="confirmYes">Ha</button><button id="confirmNo">Yo'q</button></div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-t="control" aria-pressed="true">Boshqaruv</button>
+      <button data-t="teams">Jamoalar</button>
+      <button data-t="questions">Savollar</button>
+      <button data-t="results">Natijalar</button>
+    </nav>
+
+    <!-- Boshqaruv -->
+    <div id="tControl">
+      <div class="teams" id="teamsBar"></div>
+      <div id="qPanel" class="qcard qadmin hidden">
+        <div class="qmeta">
+          <div class="rowx"><span class="pill" id="qCat"></span><span class="pill gold" id="qBall"></span></div>
+          <div class="rowx"><button id="pauseBtn">⏸ Pauza</button><button id="addTimeBtn">+30 s</button></div>
+        </div>
+        <div class="qtext" id="qText"></div>
+        <div class="timer"><div class="clock" id="clock">0</div><div class="bar"><i id="barFill"></i></div></div>
+        <div class="answer"><div class="lbl">To'g'ri javob (faqat sizga ko'rinadi)</div><div class="val" id="qAns"></div></div>
+        <div class="lbl muted" style="font-weight:800">Jamoalar javoblari</div>
+        <div class="list" id="answersList"></div>
+        <div class="rowx">
+          <button class="gold" id="publishBtn">Natijani e'lon qilish</button>
+          <button class="hidden" id="nextBtn">Taxtaga qaytish →</button>
+          <button id="cancelQBtn" title="Savolni ishlatmasdan yopish">✕ Savolni bekor qilish</button>
+        </div>
+      </div>
+      <div id="boardWrap">
+        <p class="muted" id="boardHint"></p>
+        <div class="board" id="board"></div>
+      </div>
+    </div>
+
+    <!-- Jamoalar -->
+    <div id="tTeams" class="grid2 hidden">
+      <div class="card">
+        <h2>Jamoa qo'shish</h2>
+        <form id="teamForm" class="stack">
+          <label class="field">Maktab<input type="text" id="tSchool" required placeholder="Masalan: 12-maktab"></label>
+          <label class="field">Jamoa nomi<input type="text" id="tName" required placeholder="Masalan: Bilimdonlar"></label>
+          <button class="gold" type="submit">Qo'shish</button>
+        </form>
+        <p class="muted" style="font-size:14px;line-height:1.5">Har bir jamoaga 4 xonali PIN-kod beriladi. O'quvchilar havolani ochib, o'z jamoasini tanlaydi va shu PIN-kodni kiritadi. PIN-kodni faqat o'sha jamoaga bering.</p>
+      </div>
+      <div class="card">
+        <h2>Jamoalar</h2>
+        <div class="list" id="teamsList"></div>
+      </div>
+    </div>
+
+    <!-- Savollar -->
+    <div id="tQuestions" class="card hidden">
+      <h2>Savollar paketi</h2>
+      <div class="rowx" style="margin-bottom:12px">
+        <label class="gold" style="padding:10px 16px;border-radius:12px;font-weight:800;cursor:pointer">📂 CSV faylni yuklash<input type="file" id="csvInput" accept=".csv,text/csv" class="hidden"></label>
+        <span class="muted" id="csvInfo">Format: kategoriya, ball, savol, javob</span>
+      </div>
+      <div class="tablewrap"><table id="qTable"></table></div>
+    </div>
+
+    <!-- Natijalar -->
+    <div id="tResults" class="card hidden">
+      <div class="rowx" style="justify-content:space-between;margin-bottom:14px">
+        <h2 style="margin:0">Natijalar</h2>
+        <button id="exportBtn">⬇ Natijalarni yuklab olish (CSV)</button>
+      </div>
+      <ol class="rank" id="rankList"></ol>
+      <p class="muted" id="resultNote" style="text-align:center"></p>
+    </div>
+  </section>
+
+  <footer class="credit">
+    <img src="kelajak-logo.jpg" alt="Kelajak markazlari logotipi" onerror="this.remove()">
+    <p>Ushbu dastur <b>Sayxunobod tumani «Kelajak» markazi</b> tomonidan ishlab chiqilgan.</p>
+  </footer>
+</div>
+<div class="toast hidden" id="toast"></div>
+
+<script type="module">
+import { firebaseConfig } from "./firebase-config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, collection, addDoc, setDoc, updateDoc, getDoc, getDocs, deleteDoc, onSnapshot, query, where, orderBy, serverTimestamp, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const views = ["vNoConfig","vLogin","vGames","vGame"];
+const show = v => views.forEach(x => $(x).classList.toggle("hidden", x !== v));
+function toast(t){ const el = $("toast"); el.textContent = t; el.classList.remove("hidden"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.add("hidden"), 2600); }
+function fail(e){ console.error(e); toast(e && e.code === "permission-denied" ? "Ruxsat yo'q: firestore.rules faylidagi admin emailini tekshiring" : "Xatolik: " + (e.message || e)); }
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) { show("vNoConfig"); throw new Error("Firebase sozlanmagan"); }
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+/* ---------- Kirish ---------- */
+$("loginForm").onsubmit = async e => {
+  e.preventDefault(); $("loginErr").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("lEmail").value.trim(), $("lPass").value); }
+  catch (err) { $("loginErr").textContent = "Email yoki parol noto'g'ri."; }
+};
+$("logoutBtn").onclick = () => signOut(auth);
+onAuthStateChanged(auth, u => {
+  $("userBar").classList.toggle("hidden", !u);
+  if (!u) { closeGame(); show("vLogin"); return; }
+  $("userEmail").textContent = u.email;
+  const g = new URLSearchParams(location.search).get("g");
+  g ? openGame(g) : showGames();
+});
+
+/* ---------- O'yinlar ro'yxati ---------- */
+async function showGames(){
+  closeGame(); show("vGames"); history.replaceState(null, "", location.pathname);
+  try {
+    const snap = await getDocs(query(collection(db, "games"), orderBy("createdAt", "desc")));
+    if (snap.empty) { $("gamesList").innerHTML = `<p class="muted">Hali o'yin yaratilmagan.</p>`; return; }
+    $("gamesList").innerHTML = snap.docs.map(d => {
+      const g = d.data(), date = g.createdAt ? g.createdAt.toDate().toLocaleDateString("uz-UZ") : "";
+      const win = g.results && g.results.length ? `🏆 ${esc(g.results[0].name)} (${esc(g.results[0].school)}) — ${g.results[0].score} ball` : `${(g.teams || []).length} ta jamoa · ${(g.board || []).length} ta savol`;
+      return `<div class="item" data-id="${d.id}"><div><p><b>${esc(g.title)}</b> <span class="pill ${g.status}">${statusText(g.status)}</span></p><p class="muted" style="font-size:14px">${date} · ${win}</p></div><span>→</span></div>`;
+    }).join("");
+  } catch (e) { fail(e); }
+}
+$("gamesList").addEventListener("click", e => { const it = e.target.closest(".item"); if (it) openGame(it.dataset.id); });
+const statusText = s => ({ draft: "Tayyorlanmoqda", live: "Jonli", finished: "Yakunlangan" }[s] || s);
+
+$("newGameForm").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const ref = await addDoc(collection(db, "games"), {
+      title: $("gTitle").value.trim(), status: "draft", createdAt: serverTimestamp(),
+      time: Math.max(10, Math.min(600, Math.round(+$("gTime").value || 120))),
+      mode: $("gMode").value, minus: $("gMinus").checked,
+      teams: [], board: [], active: 0, current: null, results: null
+    });
+    await setDoc(doc(db, "games", ref.id, "private", "data"), { questions: [], pins: {} });
+    $("newGameForm").reset(); openGame(ref.id);
+  } catch (err) { fail(err); }
+};
+
+/* ---------- Bitta o'yin ---------- */
+let gid = null, G = null, P = null, unsub = [], answers = {}, joins = {}, verdicts = {}, tick = null;
+const gref = () => doc(db, "games", gid);
+const pref = () => doc(db, "games", gid, "private", "data");
+
+function closeGame(){ unsub.forEach(f => f()); unsub = []; clearInterval(tick); gid = null; G = null; P = null; }
+function openGame(id){
+  closeGame(); gid = id; show("vGame");
+  history.replaceState(null, "", "?g=" + id);
+  const link = new URL("index.html?g=" + id, location.href).href;
+  $("playerLink").textContent = link;
+  unsub.push(onSnapshot(gref(), s => {
+    if (!s.exists()) { toast("O'yin topilmadi"); showGames(); return; }
+    const prevIdx = G && G.current ? G.current.idx : null;
+    G = s.data({ serverTimestamps: "estimate" });
+    const idx = G.current ? G.current.idx : null;
+    if (idx !== prevIdx) { verdicts = {}; listenAnswers(idx); }
+    if (G.current && G.current.verdicts && G.current.closed) verdicts = { ...G.current.verdicts };
+    render();
+  }, fail));
+  unsub.push(onSnapshot(pref(), s => { P = s.exists() ? s.data() : { questions: [], pins: {} }; render(); }, fail));
+  unsub.push(onSnapshot(collection(db, "games", id, "joins"), s => { joins = {}; s.forEach(d => joins[d.id] = true); render(); }, fail));
+  clearInterval(tick); tick = setInterval(drawClock, 250);
+}
+let ansUnsub = null;
+function listenAnswers(idx){
+  if (ansUnsub) { ansUnsub(); ansUnsub = null; }
+  answers = {};
+  if (idx === null || idx === undefined) return;
+  ansUnsub = onSnapshot(query(collection(db, "games", gid, "answers"), where("idx", "==", idx)), s => {
+    answers = {}; s.forEach(d => { const a = d.data(); answers[a.teamId] = a; }); renderAnswers();
+  }, fail);
+  unsub.push(() => ansUnsub && ansUnsub());
+}
+$("backBtn").onclick = showGames;
+$("copyLink").onclick = () => {
+  const t = $("playerLink").textContent;
+  navigator.clipboard.writeText(t).then(() => toast("Havola nusxalandi"), () => toast("Havolani qo'lda belgilab nusxalang"));
+};
+$("tabs").addEventListener("click", e => {
+  const t = e.target.dataset && e.target.dataset.t; if (!t) return;
+  ["control","teams","questions","results"].forEach(x => $("t" + x[0].toUpperCase() + x.slice(1)).classList.toggle("hidden", x !== t));
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === t));
+});
+
+let pending = null;
+function ask(text, fn){ pending = fn; $("confirmText").textContent = text; $("confirmBox").classList.remove("hidden"); }
+$("confirmYes").onclick = () => { $("confirmBox").classList.add("hidden"); const f = pending; pending = null; f && f(); };
+$("confirmNo").onclick = () => { $("confirmBox").classList.add("hidden"); pending = null; };
+
+/* Boshlash / yakunlash */
+$("startBtn").onclick = () => {
+  if (!G.teams.length) return toast("Avval jamoalarni qo'shing");
+  if (!G.board.length) return toast("Avval savollar faylini yuklang");
+  const again = G.status === "finished";
+  ask(again ? "O'yin qayta ochilsinmi? Ballar saqlanib qoladi." : "O'yin boshlansinmi? Havola shu zahoti ishlay boshlaydi.",
+    () => updateDoc(gref(), { status: "live", results: null, startedAt: serverTimestamp() }).then(() => toast("O'yin boshlandi!")).catch(fail));
+};
+$("finishBtn").onclick = () => ask("O'yin yakunlansinmi? Natijalar saqlanadi va o'quvchilarga g'olib e'lon qilinadi.", finishGame);
+function ranking(){ return [...G.teams].sort((a, b) => b.score - a.score).map(t => ({ id: t.id, name: t.name, school: t.school, score: t.score })); }
+async function finishGame(){
+  try { await updateDoc(gref(), { status: "finished", current: null, results: ranking(), finishedAt: serverTimestamp() }); toast("O'yin yakunlandi. Natijalar saqlandi."); }
+  catch (e) { fail(e); }
+}
+
+/* O'yinni butunlay o'chirish */
+$("deleteGameBtn").onclick = () => ask(`«${G.title}» o'yini va uning barcha natijalari butunlay o'chirilsinmi? Buni qaytarib bo'lmaydi.`, async () => {
+  const id = gid;
+  try {
+    closeGame();
+    for (const sub of ["answers", "joins", "private"]) {
+      const s = await getDocs(collection(db, "games", id, sub));
+      for (const d of s.docs) await deleteDoc(d.ref);
+    }
+    await deleteDoc(doc(db, "games", id));
+    toast("O'yin o'chirildi"); showGames();
+  } catch (e) { fail(e); }
+});
+
+/* ---------- Jamoalar ---------- */
+$("teamForm").onsubmit = async e => {
+  e.preventDefault();
+  const id = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const pin = String(Math.floor(1000 + Math.random() * 9000));
+  const team = { id, school: $("tSchool").value.trim(), name: $("tName").value.trim(), score: 0 };
+  try {
+    await updateDoc(pref(), { ["pins." + id]: pin });
+    await updateDoc(gref(), { teams: [...G.teams, team] });
+    $("tName").value = ""; $("tName").focus(); toast(`«${team.name}» qo'shildi. PIN: ${pin}`);
+  } catch (err) { fail(err); }
+};
+$("teamsList").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const id = b.dataset.id, a = b.dataset.a;
+  const teams = G.teams.map(t => ({ ...t }));
+  const t = teams.find(x => x.id === id);
+  if (a === "plus" || a === "minus") { t.score += a === "plus" ? 5 : -5; updateDoc(gref(), { teams }).catch(fail); }
+  if (a === "del") ask(`«${t.name}» jamoasi o'chirilsinmi?`, async () => {
+    try {
+      const rest = teams.filter(x => x.id !== id);
+      await updateDoc(gref(), { teams: rest, active: Math.min(G.active, Math.max(0, rest.length - 1)) });
+      await updateDoc(pref(), { ["pins." + id]: deleteField() });
+    } catch (err) { fail(err); }
+  });
+});
+
+/* ---------- Savollar (CSV) ---------- */
+function cleanQuotes(s){ return s.replace(/^[\s"']+|[\s"']+$/g, "").replace(/""/g, '"').trim(); }
+function parseLine(line){
+  const m = line.match(/^\s*"*([^,;]*?)"*\s*[,;]\s*"*\s*(\d+)\s*"*\s*[,;]([\s\S]*)$/);
+  if (!m) return null;
+  const cat = cleanQuotes(m[1]), ball = parseInt(m[2], 10), rest = m[3];
+  let q, a;
+  const border = rest.match(/"+\s*[,;]\s*"*|[,;]\s*"+/);
+  if (border) { q = rest.slice(0, border.index); a = rest.slice(border.index + border[0].length); }
+  else if (/\S\s*"{2,}\s*\S/.test(rest.replace(/^[\s"]+|[\s"]+$/g, ""))) {
+    const inner = rest.replace(/^[\s"]+|[\s"]+$/g, ""), k = inner.search(/"{2,}/);
+    q = inner.slice(0, k); a = inner.slice(k);
+  }
+  else { const i = Math.max(rest.lastIndexOf(","), rest.lastIndexOf(";")); q = i < 0 ? rest : rest.slice(0, i); a = i < 0 ? "" : rest.slice(i + 1); }
+  q = cleanQuotes(q); a = cleanQuotes(a);
+  if (!cat || !q) return null;
+  return { cat, ball, q, a: a || "(javob ko'rsatilmagan)" };
+}
+function parseCSV(text){ return text.replace(/^﻿/, "").split(/\r?\n/).map(parseLine).filter(Boolean); }
+function readText(file){
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = ev => {
+      const t = ev.target.result;
+      if (!t.includes("�")) return res(t);
+      const r2 = new FileReader(); r2.onload = e2 => res(e2.target.result); r2.readAsText(file, "windows-1251");
+    };
+    r.readAsText(file, "UTF-8");
+  });
+}
+$("csvInput").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  if (G.status !== "draft" && G.board.some(c => c.used)) return toast("O'yin davom etmoqda: savollarni almashtirib bo'lmaydi");
+  const qs = parseCSV(await readText(file));
+  if (!qs.length) { $("csvInfo").innerHTML = `<span class="err">«${esc(file.name)}» faylida savol topilmadi.</span>`; return; }
+  // Taxta tartibi: kategoriya bo'yicha, ichida ball o'sish tartibida
+  const cats = [...new Set(qs.map(q => q.cat))];
+  const sorted = cats.flatMap(c => qs.filter(q => q.cat === c).sort((a, b) => a.ball - b.ball));
+  try {
+    await updateDoc(pref(), { questions: sorted });
+    await updateDoc(gref(), { board: sorted.map(q => ({ cat: q.cat, ball: q.ball, used: false, result: null })), current: null });
+    $("csvInfo").innerHTML = `<span class="ok">✓ «${esc(file.name)}»: ${sorted.length} ta savol, ${cats.length} ta kategoriya</span>`;
+  } catch (err) { fail(err); }
+});
+
+/* ---------- Savolni boshqarish ---------- */
+$("board").addEventListener("click", async e => {
+  const b = e.target.closest(".cell"); if (!b || b.disabled) return;
+  if (G.status !== "live") return toast("Avval «O'yinni boshlash» tugmasini bosing");
+  if (G.current && !G.current.closed) return toast("Avval joriy savolni yakunlang");
+  const idx = +b.dataset.i, q = P.questions[idx];
+  try {
+    await updateDoc(gref(), { current: { idx, cat: q.cat, ball: q.ball, q: q.q, dur: G.time, startedAt: serverTimestamp(), pausedLeft: null, closed: false, answer: null, verdicts: {} } });
+  } catch (err) { fail(err); }
+});
+function timeLeft(){
+  const c = G && G.current; if (!c) return 0;
+  if (c.startedAt === null) return c.pausedLeft || 0;
+  const start = c.startedAt.toMillis ? c.startedAt.toMillis() : Date.now();
+  return Math.max(0, Math.ceil(c.dur - (Date.now() - start) / 1000));
+}
+function drawClock(){
+  if (!G || !G.current) return;
+  const l = timeLeft();
+  $("clock").textContent = G.current.closed ? "—" : l;
+  $("clock").classList.toggle("low", !G.current.closed && l <= 10);
+  $("barFill").style.width = (G.current.closed ? 0 : l / G.current.dur * 100) + "%";
+}
+$("pauseBtn").onclick = () => {
+  const c = G.current; if (!c || c.closed) return;
+  if (c.startedAt === null) updateDoc(gref(), { "current.startedAt": serverTimestamp(), "current.dur": c.pausedLeft || 1, "current.pausedLeft": null }).catch(fail);
+  else updateDoc(gref(), { "current.startedAt": null, "current.pausedLeft": timeLeft() }).catch(fail);
+};
+$("addTimeBtn").onclick = () => {
+  const c = G.current; if (!c || c.closed) return;
+  if (c.startedAt === null) updateDoc(gref(), { "current.pausedLeft": (c.pausedLeft || 0) + 30 }).catch(fail);
+  else updateDoc(gref(), { "current.dur": c.dur + 30 }).catch(fail);
+};
+$("answersList").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || G.current.closed) return;
+  const id = b.dataset.id, v = b.dataset.v === "1";
+  verdicts[id] === v ? delete verdicts[id] : verdicts[id] = v;
+  renderAnswers();
+});
+$("publishBtn").onclick = async () => {
+  const c = G.current; if (!c || c.closed) return;
+  const q = P.questions[c.idx];
+  const teams = G.teams.map(t => {
+    const v = verdicts[t.id];
+    return { ...t, score: t.score + (v === true ? c.ball : (v === false && G.minus ? -c.ball : 0)) };
+  });
+  const board = G.board.map((cell, i) => i === c.idx ? { ...cell, used: true, result: Object.values(verdicts).includes(true) ? "ok" : "no" } : cell);
+  try {
+    await updateDoc(gref(), {
+      teams, board, active: (G.active + 1) % Math.max(1, G.teams.length),
+      "current.closed": true, "current.answer": q.a, "current.verdicts": { ...verdicts }, "current.pausedLeft": null
+    });
+    if (board.every(x => x.used)) ask("Barcha savollar o'ynaldi. O'yin yakunlansinmi?", finishGame);
+  } catch (err) { fail(err); }
+};
+$("nextBtn").onclick = () => updateDoc(gref(), { current: null }).catch(fail);
+$("cancelQBtn").onclick = () => ask("Savol bekor qilinsinmi? U taxtada yana ochiq qoladi va ballar o'zgarmaydi.", () => updateDoc(gref(), { current: null }).catch(fail));
+$("teamsBar").addEventListener("click", e => { const b = e.target.closest(".team"); if (b && G.status !== "finished") updateDoc(gref(), { active: +b.dataset.i }).catch(fail); });
+
+/* ---------- Natijalar ---------- */
+$("exportBtn").onclick = () => {
+  const rows = [["O'rin", "Maktab", "Jamoa", "Ball"], ...ranking().map((t, i) => [i + 1, t.school, t.name, t.score])];
+  const csv = "﻿" + rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = (G.title || "zakovat").replace(/[\\/:*?"<>|]/g, "") + " natijalar.csv";
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+/* ---------- Chizish ---------- */
+function render(){
+  if (!G) return;
+  $("gName").textContent = G.title;
+  $("gStatus").className = "pill " + G.status; $("gStatus").textContent = statusText(G.status);
+  $("startBtn").classList.toggle("hidden", G.status === "live");
+  $("startBtn").textContent = G.status === "finished" ? "↺ Qayta ochish" : "▶ O'yinni boshlash";
+  $("finishBtn").classList.toggle("hidden", G.status !== "live");
+
+  const pins = (P && P.pins) || {};
+  $("teamsBar").innerHTML = G.teams.length ? G.teams.map((t, i) => `
+    <button class="team ${i === G.active ? "active" : ""}" data-i="${i}" title="Navbatni shu jamoaga berish">
+      <div style="min-width:0"><div class="tag">${i === G.active ? "Savol tanlaydi" : "&nbsp;"}</div><div class="nm"><span class="dot ${joins[t.id] ? "on" : ""}"></span>${esc(t.name)}</div><div class="sch">${esc(t.school)}</div></div>
+      <div class="sc">${t.score}</div></button>`).join("") : `<p class="muted">Jamoalar yo'q. «Jamoalar» bo'limida qo'shing.</p>`;
+
+  $("teamsList").innerHTML = G.teams.length ? G.teams.map(t => `
+    <div class="item"><div><p><span class="dot ${joins[t.id] ? "on" : ""}"></span><b>${esc(t.name)}</b> · ${esc(t.school)}</p>
+      <p class="muted" style="font-size:14px">PIN: <span class="secret">${esc(pins[t.id] || "—")}</span> · ${t.score} ball · ${joins[t.id] ? "ulangan" : "hali ulanmagan"}</p></div>
+      <div class="rowx"><button data-a="minus" data-id="${t.id}" title="5 ball ayirish">−5</button><button data-a="plus" data-id="${t.id}" title="5 ball qo'shish">+5</button><button class="red" data-a="del" data-id="${t.id}">O'chirish</button></div></div>`).join("") : `<p class="muted">Hali jamoa qo'shilmagan.</p>`;
+
+  const qs = (P && P.questions) || [];
+  $("qTable").innerHTML = qs.length ? `<tr><th>#</th><th>Kategoriya</th><th>Ball</th><th>Savol</th><th>Javob</th></tr>` +
+    qs.map((q, i) => `<tr><td>${i + 1}</td><td>${esc(q.cat)}</td><td>${q.ball}</td><td style="min-width:260px">${esc(q.q)}</td><td style="min-width:160px">${esc(q.a)}</td></tr>`).join("")
+    : `<tr><td class="muted">Savollar yuklanmagan.</td></tr>`;
+
+  const cats = [...new Set(G.board.map(c => c.cat))];
+  const cur = G.current;
+  $("board").innerHTML = cats.map(cat => `<div class="brow"><div class="cat">${esc(cat)}</div><div class="cells">${
+    G.board.map((c, i) => ({ c, i })).filter(x => x.c.cat === cat).map(({ c, i }) =>
+      `<button class="cell ${c.used ? "used" : ""} ${c.result === "ok" ? "okc" : ""} ${cur && cur.idx === i ? "now" : ""}" data-i="${i}" data-b="${c.ball}" ${c.used ? "disabled" : ""}>${c.used ? (c.result === "ok" ? "✓" : "✗") : c.ball}</button>`).join("")
+  }</div></div>`).join("");
+  const used = G.board.filter(c => c.used).length;
+  $("boardHint").textContent = G.status === "draft" ? "O'yin hali boshlanmagan. O'quvchilar havolani ochsa, kutish ekranini ko'radi."
+    : G.status === "finished" ? "O'yin yakunlangan." : `${used} / ${G.board.length} savol o'ynaldi. Navbatdagi jamoa tanlagan savolni bosing.`;
+
+  $("qPanel").classList.toggle("hidden", !cur);
+  if (cur) {
+    $("qCat").textContent = cur.cat; $("qBall").textContent = cur.ball + " ball";
+    $("qText").textContent = cur.q; $("qAns").textContent = qs[cur.idx] ? qs[cur.idx].a : "";
+    $("pauseBtn").textContent = cur.startedAt === null ? "▶ Davom" : "⏸ Pauza";
+    ["pauseBtn","addTimeBtn","publishBtn","cancelQBtn"].forEach(x => $(x).classList.toggle("hidden", cur.closed));
+    $("nextBtn").classList.toggle("hidden", !cur.closed);
+    drawClock(); renderAnswers();
+  }
+
+  const r = G.results || ranking();
+  $("rankList").innerHTML = r.map((t, i) => `<li><span>${i + 1}. ${esc(t.name)}<small>${esc(t.school)}</small></span><span>${t.score} ball</span></li>`).join("");
+  $("resultNote").textContent = G.results ? "Yakuniy natijalar saqlangan" + (G.finishedAt ? " · " + G.finishedAt.toDate().toLocaleString("uz-UZ") : "") : "O'yin hali yakunlanmagan: bu joriy holat.";
+}
+function renderAnswers(){
+  if (!G || !G.current) return;
+  const c = G.current;
+  const list = G.mode === "turn" ? G.teams.filter((t, i) => i === G.active || answers[t.id] || verdicts[t.id] !== undefined) : G.teams;
+  $("answersList").innerHTML = list.map(t => {
+    const a = answers[t.id], v = verdicts[t.id];
+    return `<div class="ans ${a ? "" : "none"}"><div><div class="who">${esc(t.name)} <span class="muted" style="font-weight:600">· ${esc(t.school)}</span></div>
+      <div class="txt">${a ? esc(a.text) : '<span class="muted">Javob yubormadi</span>'}</div></div>
+      <div class="rowx"><button class="vbtn green ${v === true ? "on" : ""}" data-id="${t.id}" data-v="1" ${c.closed ? "disabled" : ""}>✓</button>
+      <button class="vbtn red ${v === false ? "on" : ""}" data-id="${t.id}" data-v="0" ${c.closed ? "disabled" : ""}>✗</button></div></div>`;
+  }).join("") || `<p class="muted">Jamoalar yo'q.</p>`;
+}
+</script>
+</body>
+</html>

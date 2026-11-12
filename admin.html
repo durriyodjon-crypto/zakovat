@@ -266,10 +266,12 @@ function openGame(id){
     const idx = G.current ? G.current.idx : null;
     if (idx !== prevIdx) { verdicts = {}; listenAnswers(idx); }
     if (G.current && G.current.verdicts && G.current.closed) verdicts = { ...G.current.verdicts };
-    render();
+    render(); processPicks();
   }, fail));
-  unsub.push(onSnapshot(pref(), s => { P = s.exists() ? s.data() : { questions: [], pins: {} }; render(); }, fail));
+  unsub.push(onSnapshot(pref(), s => { P = s.exists() ? s.data() : { questions: [], pins: {} }; render(); processPicks(); }, fail));
   unsub.push(onSnapshot(collection(db, "games", id, "joins"), s => { joins = {}; s.forEach(d => joins[d.id] = true); render(); }, fail));
+  picks = {};
+  unsub.push(onSnapshot(collection(db, "games", id, "picks"), s => { s.forEach(d => picks[d.id] = d.data()); processPicks(); }, fail));
   clearInterval(tick); tick = setInterval(drawClock, 250);
 }
 let ansUnsub = null;
@@ -318,7 +320,7 @@ $("deleteGameBtn").onclick = () => ask(`«${G.title}» o'yini va uning barcha na
   const id = gid;
   try {
     closeGame();
-    for (const sub of ["answers", "joins", "private"]) {
+    for (const sub of ["answers", "joins", "picks", "private"]) {
       const s = await getDocs(collection(db, "games", id, sub));
       for (const d of s.docs) await deleteDoc(d.ref);
     }
@@ -404,11 +406,34 @@ $("board").addEventListener("click", async e => {
   const b = e.target.closest(".cell"); if (!b || b.disabled) return;
   if (G.status !== "live") return toast("Avval «O'yinni boshlash» tugmasini bosing");
   if (G.current && !G.current.closed) return toast("Avval joriy savolni yakunlang");
-  const idx = +b.dataset.i, q = P.questions[idx];
-  try {
-    await updateDoc(gref(), { current: { idx, cat: q.cat, ball: q.ball, q: q.q, dur: G.time, startedAt: serverTimestamp(), pausedLeft: null, closed: false, answer: null, verdicts: {} } });
-  } catch (err) { fail(err); }
+  try { await openQuestionAt(+b.dataset.i); } catch (err) { fail(err); }
 });
+function openQuestionAt(idx){
+  const q = P.questions[idx];
+  return updateDoc(gref(), { current: { idx, cat: q.cat, ball: q.ball, q: q.q, dur: G.time, startedAt: serverTimestamp(), pausedLeft: null, closed: false, answer: null, verdicts: {} } });
+}
+
+/* Navbatdagi jamoa telefonidan tanlagan savolni avtomatik ochish */
+let picks = {}, picking = false;
+async function processPicks(){
+  if (picking || !G || !P || !gid) return;
+  const ids = Object.keys(picks); if (!ids.length) return;
+  picking = true;
+  try {
+    for (const teamId of ids) {
+      const p = picks[teamId]; delete picks[teamId];
+      const team = G.teams[G.active];
+      const ok = G.status === "live" && team && team.id === teamId && (!G.current || G.current.closed)
+        && G.board[p.idx] && !G.board[p.idx].used && P.questions[p.idx];
+      if (ok) {
+        await openQuestionAt(p.idx);
+        toast(`«${team.name}» jamoasi ${G.board[p.idx].cat}, ${G.board[p.idx].ball} ballik savolni tanladi`);
+      }
+      await deleteDoc(doc(db, "games", gid, "picks", teamId));
+    }
+  } catch (e) { fail(e); }
+  finally { picking = false; }
+}
 function timeLeft(){
   const c = G && G.current; if (!c) return 0;
   if (c.startedAt === null) return c.pausedLeft || 0;
@@ -502,7 +527,7 @@ function render(){
   }</div></div>`).join("");
   const used = G.board.filter(c => c.used).length;
   $("boardHint").textContent = G.status === "draft" ? "O'yin hali boshlanmagan. O'quvchilar havolani ochsa, kutish ekranini ko'radi."
-    : G.status === "finished" ? "O'yin yakunlangan." : `${used} / ${G.board.length} savol o'ynaldi. Navbatdagi jamoa tanlagan savolni bosing.`;
+    : G.status === "finished" ? "O'yin yakunlangan." : `${used} / ${G.board.length} savol o'ynaldi. Navbatdagi jamoa savolni telefonidan tanlaydi va u shu yerda avtomatik ochiladi. Kerak bo'lsa, savolni o'zingiz ham bosib ochishingiz mumkin.`;
 
   $("qPanel").classList.toggle("hidden", !cur);
   if (cur) {

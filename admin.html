@@ -20,6 +20,9 @@
 .dot.on{background:var(--green)}
 .linkbox{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel2);border-radius:12px;padding:10px 12px}
 .linkbox code{flex:1 1 260px;overflow-wrap:anywhere;font-size:14px}
+.btnlink{display:inline-block;text-decoration:none;border-radius:12px;padding:10px 16px;font-weight:800}
+.btnlink.gold{color:#1b1300}
+.btnlink.tg{background:#229ed9;color:#fff}
 .games .item{cursor:pointer}
 .games .item:hover{border-color:var(--gold)}
 </style>
@@ -42,6 +45,10 @@
 
   <!-- Kirish -->
   <section id="vLogin" class="card center hidden">
+    <div id="studentHint" class="hidden" style="background:var(--panel2);border:2px solid var(--gold);border-radius:14px;padding:16px;margin-bottom:22px">
+      <p style="margin:0 0 12px;font-size:18px;font-weight:700">O'quvchimisiz? Bu sahifa faqat boshlovchi uchun.</p>
+      <a class="btnlink gold" id="studentLink" href="index.html">O'yinga kirish →</a>
+    </div>
     <h1>Admin kirishi</h1>
     <form id="loginForm" class="stack" style="text-align:left">
       <label class="field">Email<input type="email" id="lEmail" required autocomplete="username"></label>
@@ -88,6 +95,8 @@
       <span class="muted">O'quvchilar uchun havola:</span>
       <code id="playerLink"></code>
       <button id="copyLink">Nusxalash</button>
+      <a class="btnlink tg" id="tgShare" href="#" target="_blank" rel="noopener">✈ Telegram'da yuborish</a>
+      <span class="muted" style="flex-basis:100%;font-size:13px">⚠️ O'quvchilarga faqat shu havolani yuboring. Brauzerning manzil satridagi havola admin paneliga olib boradi.</span>
     </div>
     <div class="card hidden" id="confirmBox" style="margin-bottom:14px">
       <div class="rowx"><span id="confirmText" style="font-weight:700"></span><button class="red" id="confirmYes">Ha</button><button id="confirmNo">Yo'q</button></div>
@@ -196,7 +205,14 @@ $("loginForm").onsubmit = async e => {
 $("logoutBtn").onclick = () => signOut(auth);
 onAuthStateChanged(auth, u => {
   $("userBar").classList.toggle("hidden", !u);
-  if (!u) { closeGame(); show("vLogin"); return; }
+  if (!u) {
+    closeGame(); show("vLogin");
+    // O'quvchi adashib admin havolasini ochgan bo'lsa, uni o'yin sahifasiga yo'naltiramiz
+    const g = new URLSearchParams(location.search).get("g");
+    $("studentHint").classList.toggle("hidden", !g);
+    if (g) $("studentLink").href = "index.html?g=" + encodeURIComponent(g);
+    return;
+  }
   $("userEmail").textContent = u.email;
   const g = new URLSearchParams(location.search).get("g");
   g ? openGame(g) : showGames();
@@ -456,6 +472,7 @@ $("exportBtn").onclick = () => {
 function render(){
   if (!G) return;
   $("gName").textContent = G.title;
+  $("tgShare").href = "https://t.me/share/url?url=" + encodeURIComponent($("playerLink").textContent) + "&text=" + encodeURIComponent("«" + G.title + "» Zakovat o'yiniga havola. Jamoangizni tanlab, PIN-kodni kiriting.");
   $("gStatus").className = "pill " + G.status; $("gStatus").textContent = statusText(G.status);
   $("startBtn").classList.toggle("hidden", G.status === "live");
   $("startBtn").textContent = G.status === "finished" ? "↺ Qayta ochish" : "▶ O'yinni boshlash";

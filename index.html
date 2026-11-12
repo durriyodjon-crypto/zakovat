@@ -14,6 +14,12 @@
 .sendrow button{flex:0 0 auto;font-size:18px;padding:12px 22px}
 .sent{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:12px;padding:10px 14px}
 .cell{cursor:default}
+button.cell{cursor:pointer;font:inherit;font-family:var(--display);font-size:20px;color:var(--gold)}
+button.cell:hover:not(:disabled){outline:3px solid var(--gold)}
+.pickhint{background:var(--gold);color:#1b1300;border-radius:14px;padding:14px 18px;font-weight:800;font-size:19px;text-align:center;margin-bottom:12px}
+@keyframes glow{50%{box-shadow:0 0 0 6px rgba(245,184,46,.35)}}
+.pickhint{animation:glow 1.6s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.pickhint{animation:none}}
 .wait{font-size:60px;margin-bottom:6px}
 @keyframes bob{50%{transform:translateY(-8px)}}
 .wait{animation:bob 2.4s ease-in-out infinite}
@@ -72,6 +78,7 @@
       </div>
     </div>
 
+    <div class="pickhint hidden" id="pickHint">Sizning navbatingiz! Pastdagi taxtadan savol tanlang 👇</div>
     <p class="muted" id="boardHint" style="text-align:center;font-weight:700"></p>
     <div class="board" id="board"></div>
   </section>
@@ -150,6 +157,25 @@ $("sendForm").onsubmit = async e => {
   } finally { $("sendBtn").disabled = false; }
 };
 
+/* ---------- Savol tanlash (navbatdagi jamoa) ---------- */
+let picked = null;   // { idx, at } — yuborilgan tanlov
+function canPick(){
+  if (!G || !me || G.status !== "live") return false;
+  const act = G.teams[G.active];
+  return !!act && act.id === me.teamId && (!G.current || G.current.closed);
+}
+$("board").addEventListener("click", async e => {
+  const b = e.target.closest("button.cell"); if (!b || b.disabled || !canPick()) return;
+  const idx = +b.dataset.i;
+  picked = { idx, at: Date.now() }; render();
+  try {
+    await setDoc(doc(db, "games", gid, "picks", me.teamId), { idx, pin: me.pin, at: serverTimestamp() });
+  } catch (err) {
+    picked = null; render();
+    $("boardHint").textContent = err.code === "permission-denied" ? "Tanlov qabul qilinmadi: navbat sizda emas yoki savol allaqachon ochilgan." : "Yuborib bo'lmadi. Internetni tekshiring.";
+  }
+});
+
 /* ---------- Taymer ---------- */
 function timeLeft(){
   const c = G && G.current; if (!c) return 0;
@@ -158,6 +184,7 @@ function timeLeft(){
 }
 let wasOpen = false;
 setInterval(() => {
+  if (picked && Date.now() - picked.at > 15000) render();
   if (!G || !G.current || G.current.closed) return;
   const l = timeLeft();
   $("clock").textContent = l;
@@ -214,12 +241,22 @@ function render(){
       $("clock").textContent = "—"; $("barFill").style.width = "0%"; $("clock").classList.remove("low");
     }
   }
+  // Tanlov yuborilgan, boshlovchi hali ochmagan bo'lsa: 15 soniyadan keyin qayta tanlashga ruxsat
+  if (picked && (G.current && !G.current.closed || Date.now() - picked.at > 15000)) picked = null;
+  const pick = canPick() && !picked;
+  $("pickHint").classList.toggle("hidden", !pick);
   const cats = [...new Set(G.board.map(x => x.cat))];
   $("board").innerHTML = cats.map(cat => `<div class="brow"><div class="cat">${esc(cat)}</div><div class="cells">${
-    G.board.map((x, i) => ({ x, i })).filter(o => o.x.cat === cat).map(({ x, i }) =>
-      `<div class="cell ${x.used ? "used" : ""} ${x.result === "ok" ? "okc" : ""} ${c && c.idx === i ? "now" : ""}" data-b="${x.ball}">${x.used ? (x.result === "ok" ? "✓" : "✗") : x.ball}</div>`).join("")
+    G.board.map((x, i) => ({ x, i })).filter(o => o.x.cat === cat).map(({ x, i }) => {
+      const cls = `cell ${x.used ? "used" : ""} ${x.result === "ok" ? "okc" : ""} ${(c && !c.closed && c.idx === i) || (picked && picked.idx === i) ? "now" : ""}`;
+      const label = x.used ? (x.result === "ok" ? "✓" : "✗") : x.ball;
+      return pick ? `<button class="${cls}" data-i="${i}" data-b="${x.ball}" ${x.used ? "disabled" : ""}>${label}</button>`
+                  : `<div class="${cls}" data-b="${x.ball}">${label}</div>`;
+    }).join("")
   }</div></div>`).join("");
-  $("boardHint").textContent = c ? "" : (G.teams[G.active] ? `Navbatdagi savolni «${G.teams[G.active].name}» jamoasi tanlaydi` : "");
+  const act = G.teams[G.active];
+  $("boardHint").textContent = picked ? "✓ Tanlovingiz yuborildi. Savol ochilmoqda…"
+    : pick ? "" : (c && !c.closed) ? "" : act ? `Navbatdagi savolni «${act.name}» jamoasi tanlaydi` : "";
 }
 function renderJoin(){
   show("vJoin");
